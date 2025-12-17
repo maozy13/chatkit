@@ -47,79 +47,69 @@ const InputArea: React.FC<InputAreaProps> = ({
   };
 
   return (
-    <div className="border-t border-gray-200 p-4">
-      {/* 上下文标签 */}
-      {context && context.title && (
-        <div className="mb-2 flex items-center justify-between bg-blue-50 px-3 py-2 rounded-md">
-          <div className="flex items-center gap-2">
-            <svg
-              className="w-4 h-4 text-blue-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
-              />
-            </svg>
-            <span className="text-sm text-blue-700 font-medium">
+    <div className="px-5 pb-3 bg-white">
+      {/* 整体输入容器 */}
+      <div className="relative h-40">
+        {/* 上下文标签 */}
+        {context && context.title && (
+          <div className="absolute top-0 left-1 right-1 bg-[rgba(18,110,227,0.04)] rounded-lg px-4 py-2 h-10 flex items-center">
+            <p className="text-[12px] leading-6 text-[rgba(0,0,0,0.85)] truncate" style={{ fontFamily: 'Noto Sans SC' }}>
               {context.title}
-            </span>
-          </div>
-          <button
-            onClick={onRemoveContext}
-            className="text-blue-600 hover:text-blue-800"
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+            </p>
+            <button
+              onClick={onRemoveContext}
+              className="ml-auto text-[rgba(0,0,0,0.45)] hover:text-[rgba(0,0,0,0.85)] transition-colors flex-shrink-0"
+              title="移除上下文"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
+              <svg
+                className="w-3 h-3"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
+        )}
+
+        {/* 输入框容器 */}
+        <div
+          className="absolute bg-white border-[1.5px] border-solid border-[#3b9be0] rounded-2xl overflow-hidden"
+          style={{
+            top: context && context.title ? '48px' : '0',
+            left: 0,
+            right: 0,
+            bottom: 0,
+          }}
+        >
+          {/* 输入框 */}
+          <textarea
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="查询任何问题"
+            disabled={disabled}
+            className="w-full h-full resize-none px-3 py-3 text-[14px] leading-normal text-black placeholder:text-[rgba(0,0,0,0.25)] focus:outline-none disabled:bg-gray-50 disabled:cursor-not-allowed"
+            style={{ fontFamily: 'Noto Sans, Noto Sans SC, Noto Sans JP, sans-serif' }}
+            maxLength={4000}
+          />
+
+          {/* 发送按钮 */}
+          <button
+            onClick={onSend}
+            disabled={disabled || !value.trim()}
+            className="absolute bottom-3 right-3 w-8 h-8 flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed transition-opacity"
+            title={disabled ? '正在发送...' : '发送消息'}
+          >
+            <img src="/icons/send.svg" alt="发送" className="w-8 h-8" />
           </button>
         </div>
-      )}
-
-      {/* 输入框区域 */}
-      <div className="flex items-end gap-2">
-        <textarea
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="请输入问题..."
-          disabled={disabled}
-          className="flex-1 resize-none border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-          rows={3}
-        />
-        <button
-          onClick={onSend}
-          disabled={disabled || !value.trim()}
-          className="p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-        >
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-            />
-          </svg>
-        </button>
       </div>
     </div>
   );

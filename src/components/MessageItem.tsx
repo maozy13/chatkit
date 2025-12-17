@@ -71,29 +71,42 @@ const MessageItem: React.FC<MessageItemProps> = ({ message }) => {
     }
 
     return (
-      <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">
+      <p className="text-[14px] whitespace-pre-wrap break-words leading-[24px]">
         {message.content}
       </p>
     );
   };
 
   return (
-    <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
-      {/* 如果用户消息包含应用上下文，则在消息上方显示上下文标题 */}
-      {isUser && message.applicationContext && message.applicationContext.title && (
-        <div className="text-xs text-gray-500 mb-1 px-2">
-          {message.applicationContext.title}
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
+      {/* AI 头像 (仅助手消息) */}
+      {!isUser && (
+        <div className="w-[21px] h-[21px] mr-2 flex-shrink-0 mt-1">
+          <img src="/icons/assistant.svg" alt="AI Assistant" className="w-[21px] h-[21px]" />
         </div>
       )}
 
-      <div
-        className={`max-w-[80%] rounded-lg px-4 py-2 ${
-          isUser
-            ? 'bg-blue-500 text-white'
-            : 'bg-gray-100 text-gray-800'
-        }`}
-      >
-        {renderContent()}
+      <div className="flex flex-col gap-2 max-w-[calc(100%-40px)]">
+        {/* 如果用户消息包含应用上下文，在消息内容中显示 */}
+        {isUser && message.applicationContext && message.applicationContext.title && (
+          <div className="self-end">
+            <span className="inline-block bg-[rgba(18,110,227,0.04)] rounded-[8px] px-[14px] py-[5px] text-[12px] leading-[24px] text-[rgba(0,0,0,0.85)]" style={{ fontFamily: 'Noto Sans SC' }}>
+              {message.applicationContext.title}
+            </span>
+          </div>
+        )}
+
+        {/* 消息内容 */}
+        <div
+          className={`rounded-[8px] ${
+            isUser
+              ? 'bg-[rgba(18,110,227,0.1)] text-[rgba(0,0,0,0.85)] px-[14px] py-[5px]'
+              : 'bg-white text-black px-4 py-3'
+          }`}
+          style={{ fontFamily: 'Noto Sans SC' }}
+        >
+          {renderContent()}
+        </div>
       </div>
     </div>
   );

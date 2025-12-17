@@ -2,6 +2,8 @@ import { Component } from 'react';
 import { ChatMessage, RoleType, ApplicationContext, ChatKitInterface, EventStreamMessage, ChatMessageType } from '../types';
 import MessageList from './MessageList';
 import InputArea from './InputArea';
+import Header from './Header';
+import Prologue from './Prologue';
 
 /**
  * ChatKitBase 组件的属性接口
@@ -340,6 +342,13 @@ export abstract class ChatKitBase<P extends ChatKitBaseProps = ChatKitBaseProps>
     this.setState({ textInput: value });
   };
 
+  /**
+   * 处理推荐问题点击
+   */
+  private handleQuestionClick = (question: string) => {
+    this.setState({ textInput: question });
+  };
+
   render() {
     if (!this.props.visible) {
       return null;
@@ -347,56 +356,25 @@ export abstract class ChatKitBase<P extends ChatKitBaseProps = ChatKitBaseProps>
 
     const { title = 'Copilot', onClose } = this.props;
     const { messages, textInput, applicationContext, isSending } = this.state;
+    const showPrologue = messages.length === 0;
 
     return (
-      <div className="flex flex-col h-screen w-96 bg-white shadow-2xl border-l border-gray-200">
+      <div className="flex flex-col h-full w-full bg-white shadow-2xl">
         {/* 头部 */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-          <div className="flex items-center gap-2">
-            <svg
-              className="w-5 h-5 text-blue-600"
-              fill="currentColor"
-              viewBox="0 0 20 20"
-            >
-              <path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H9l-3 3v-3H4a2 2 0 01-2-2V5z" />
-              <path d="M15 7v2a4 4 0 01-4 4H9.828l-1.766 1.767c.28.149.599.233.938.233h2l3 3v-3h2a2 2 0 002-2V9a2 2 0 00-2-2h-1z" />
-            </svg>
-            <span className="font-semibold text-gray-800">{title}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            {/* 新建会话按钮 */}
-            <button
-              onClick={this.createConversation}
-              className="text-gray-500 hover:text-gray-700"
-              title="新建会话"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-            </button>
-            {/* 更多选项按钮 */}
-            <button className="text-gray-500 hover:text-gray-700" title="更多选项">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-              </svg>
-            </button>
-            {/* 关闭按钮 */}
-            {onClose && (
-              <button
-                onClick={onClose}
-                className="text-gray-500 hover:text-gray-700"
-                title="关闭"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            )}
-          </div>
-        </div>
+        <Header
+          title={title}
+          onClose={onClose}
+          onNewChat={this.createConversation}
+        />
 
-        {/* 消息列表区域 */}
-        <MessageList messages={messages} />
+        {/* 消息列表区域或欢迎界面 */}
+        <div className="flex-1 overflow-y-auto">
+          {showPrologue ? (
+            <Prologue onQuestionClick={this.handleQuestionClick} />
+          ) : (
+            <MessageList messages={messages} />
+          )}
+        </div>
 
         {/* 输入区域 */}
         <InputArea

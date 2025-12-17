@@ -10,7 +10,7 @@ import { DATA_AGENT_CONFIG } from './config';
 export const ChatKitDataAgentDemo: React.FC = () => {
   const [showChat, setShowChat] = useState(false);
   const chatKitRef = useRef<ChatKitDataAgent>(null);
-  const chatOffsetClass = showChat ? 'md:pr-[420px]' : '';
+  const chatOffsetClass = showChat ? 'md:pr-[500px]' : '';
 
   /**
    * 注入上下文示例
@@ -88,7 +88,7 @@ export const ChatKitDataAgentDemo: React.FC = () => {
       </div>
 
       {showChat && (
-        <div className="fixed right-4 top-4 bottom-4 w-[360px] md:w-[400px] max-w-[92vw] z-10">
+        <div className="fixed right-4 top-4 bottom-4 w-[480px] max-w-[92vw] z-10">
           <ChatKitDataAgent
             ref={chatKitRef}
             title="Data Agent Copilot"
