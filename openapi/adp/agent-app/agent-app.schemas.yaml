@@ -26,8 +26,8 @@ components:
           description: agent ID。
         agent_version:
           type: string
-          description: agent 版本，“v0“表示最新版本
-          enum: [v0]
+          description: agent 版本，“latest“表示最新版本
+          enum: [latest]
         executor_version:
           type: string
           description: 智能体执行引擎版本，最新为“v2“
@@ -137,7 +137,8 @@ components:
             步骤的类型：
               - llm：表示大模型输出
               - skill：表示技能调用
-          enum: [llm, skill]
+              - assign: 变量赋值
+          enum: [llm, skill, assign]
         answer:
           oneOf:
           - $ref: "#/components/schemas/LLMAnswer"
@@ -239,7 +240,7 @@ components:
                 description: 搜索结果的来源文章标题
               content:
                 type: string
-                description: 搜索结果的来源内容摘要
+                description: 搜索结果的内容摘要
     
     SkillInfo:
       type: object
