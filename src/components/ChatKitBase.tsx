@@ -1,5 +1,5 @@
 import { Component } from 'react';
-import { ChatMessage, RoleType, ApplicationContext, ChatKitInterface, EventStreamMessage, ChatMessageType, OnboardingInfo, WebSearchQuery } from '../types';
+import { ChatMessage, RoleType, ApplicationContext, ChatKitInterface, EventStreamMessage, OnboardingInfo, WebSearchQuery, BlockType, MarkdownBlock, WebSearchBlock } from '../types';
 import MessageList from './MessageList';
 import InputArea from './InputArea';
 import Header from './Header';
@@ -197,12 +197,18 @@ export abstract class ChatKitBase<P extends ChatKitBaseProps = ChatKitBaseProps>
   /**
    * 将 API 接口返回的 EventStream 增量解析成完整的 AssistantMessage 对象 (抽象方法，由子类实现)
    * 当接收到 SSE 消息时触发，该方法需要由子类实现
-   * 注意：该方法是一个无状态无副作用的函数，不允许修改 state
+   * 子类在该方法中应该调用 appendMarkdownBlock() 或 appendWebSearchBlock() 来更新消息内容
+   * 注意：该方法应该只处理数据解析逻辑，通过调用 append*Block 方法来更新界面
    * @param eventMessage 接收到的一条 Event Message
    * @param prev 上一次增量更新后的 AssistantMessage 对象
+   * @param messageId 当前正在更新的消息 ID，用于调用 append*Block 方法
    * @returns 返回更新后的 AssistantMessage 对象
    */
-  public abstract reduceAssistantMessage<T = any, K = any>(eventMessage: T, prev: K): K;
+  public abstract reduceAssistantMessage<T = any, K = any>(
+    eventMessage: T,
+    prev: K,
+    messageId: string
+  ): K;
 
   /**
    * 检查是否需要刷新 token (抽象方法，由子类实现)
@@ -231,26 +237,78 @@ export abstract class ChatKitBase<P extends ChatKitBaseProps = ChatKitBaseProps>
   };
 
   /**
-   * 使用 Markdown 渲染 AI 助手返回的文本内容
-   * 该方法由子类调用
-   * @param text 要渲染到界面的文本，每次都传完整的文本
+   * 添加或更新 Markdown 类型的消息块
+   * 该方法由子类调用，用于在消息中添加或更新 Markdown 内容块
+   * 如果最后一个块是 Markdown 块且内容为空或是 text 的前缀，则更新它（流式更新场景）
+   * 否则添加新的 Markdown 块（新阶段场景）
+   * @param messageId 消息 ID
+   * @param text 要添加或更新的 Markdown 文本，每次都传完整的文本
    */
-  protected appendTextBlock(text: string): void {
-    // 此方法由子类在处理 EventStream 时调用
-    // 实际的渲染逻辑已经在 MessageList 组件中通过 ReactMarkdown 实现
-    // 子类应该调用此方法来更新消息内容，然后通过 setState 更新界面
-    console.log('appendTextBlock 被调用，文本长度:', text.length);
+  protected appendMarkdownBlock(messageId: string, text: string): void {
+    this.setState((prevState) => {
+      const newMessages = prevState.messages.map((msg) => {
+        if (msg.messageId === messageId) {
+          const lastBlock = msg.content.length > 0 ? msg.content[msg.content.length - 1] : null;
+          let newContent;
+
+          // 如果最后一个块是 Markdown 块，且满足流式更新条件（空内容或是新文本的前缀），则更新它
+          if (
+            lastBlock &&
+            lastBlock.type === BlockType.MARKDOWN &&
+            (lastBlock.content === '' || text.startsWith(lastBlock.content))
+          ) {
+            // 流式更新：更新最后一个 Markdown 块
+            newContent = [...msg.content];
+            newContent[newContent.length - 1] = {
+              type: BlockType.MARKDOWN,
+              content: text,
+            } as MarkdownBlock;
+          } else {
+            // 新阶段：添加新的 Markdown 块
+            newContent = [
+              ...msg.content,
+              {
+                type: BlockType.MARKDOWN,
+                content: text,
+              } as MarkdownBlock,
+            ];
+          }
+
+          return { ...msg, content: newContent };
+        }
+        return msg;
+      });
+
+      return { messages: newMessages };
+    });
   }
 
   /**
-   * 渲染 AI 助手执行 Web 搜索的执行详情
-   * 该方法由子类调用
+   * 添加 Web 搜索类型的消息块
+   * 该方法由子类调用，用于在消息中添加 Web 搜索结果
+   * @param messageId 消息 ID
    * @param query Web 搜索的执行详情
    */
-  protected appendWebSearchBlock(query: WebSearchQuery): void {
-    // 此方法由子类在处理 EventStream 时调用
-    // 子类应该调用此方法来添加 Web 搜索结果到消息内容中
-    console.log('appendWebSearchBlock 被调用，搜索查询:', query.input, '结果数量:', query.results.length);
+  protected appendWebSearchBlock(messageId: string, query: WebSearchQuery): void {
+    this.setState((prevState) => {
+      const newMessages = prevState.messages.map((msg) => {
+        if (msg.messageId === messageId) {
+          // 添加 Web 搜索块
+          const newContent = [
+            ...msg.content,
+            {
+              type: BlockType.WEB_SEARCH,
+              content: query,
+            } as WebSearchBlock,
+          ];
+
+          return { ...msg, content: newContent };
+        }
+        return msg;
+      });
+
+      return { messages: newMessages };
+    });
   }
 
   /**
@@ -340,8 +398,12 @@ export abstract class ChatKitBase<P extends ChatKitBaseProps = ChatKitBaseProps>
     // 创建用户消息
     const userMessage: ChatMessage = {
       messageId: `user-${Date.now()}`,
-      content: text,
-      type: ChatMessageType.TEXT,
+      content: [
+        {
+          type: BlockType.TEXT,
+          content: text,
+        },
+      ],
       role: {
         name: '用户',
         type: RoleType.USER,
@@ -381,15 +443,16 @@ export abstract class ChatKitBase<P extends ChatKitBaseProps = ChatKitBaseProps>
    * @param reader ReadableStreamDefaultReader
    * @param assistantMessageId 助手消息 ID
    */
-  protected async handleStreamResponse(
+  protected async handleStreamResponse<T = any>(
     reader: ReadableStreamDefaultReader<Uint8Array>,
     assistantMessageId: string
-  ): Promise<string> {
+  ): Promise<T> {
     const decoder = new TextDecoder();
-    let buffer = '';
+    let assistantMessage: T = {} as T;
 
     try {
       let currentEvent = ''; // 保存当前的 SSE event 类型
+      let buffer = ''; // 用于缓存不完整的行
 
       while (true) {
         const { done, value } = await reader.read();
@@ -398,20 +461,29 @@ export abstract class ChatKitBase<P extends ChatKitBaseProps = ChatKitBaseProps>
           break;
         }
 
+        // 将新数据追加到缓冲区
         const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n').filter((line) => line.trim());
+        buffer += chunk;
+
+        // 按换行符分割，但保留最后一个可能不完整的部分
+        const lines = buffer.split('\n');
+        // 最后一个元素可能是不完整的行，保留在 buffer 中
+        buffer = lines.pop() || '';
 
         for (const line of lines) {
+          const trimmedLine = line.trim();
+          if (!trimmedLine) continue;
+
           // 处理 SSE 的 event 行
-          if (line.startsWith('event:')) {
+          if (trimmedLine.startsWith('event:')) {
             // 保存 SSE 事件类型，用于下一个 data 行
-            currentEvent = line.slice(6).trim();
+            currentEvent = trimmedLine.slice(6).trim();
             console.log('收到SSE event:', currentEvent);
             continue;
           }
 
-          if (line.startsWith('data:')) {
-            const dataStr = line.slice(5).trim();
+          if (trimmedLine.startsWith('data:')) {
+            const dataStr = trimmedLine.slice(5).trim();
 
             if (dataStr === '[DONE]') {
               console.log('收到 DONE 标记');
@@ -432,35 +504,34 @@ export abstract class ChatKitBase<P extends ChatKitBaseProps = ChatKitBaseProps>
               console.log('构造的 EventStreamMessage:', eventMessage);
 
               // 调用子类的 reduceAssistantMessage 方法解析事件
-              buffer = this.reduceAssistantMessage(eventMessage, buffer);
-              console.log('handleStreamResponse - buffer更新后:', buffer);
-
-              // 更新界面上的消息内容
-              this.setState((prevState) => {
-                console.log('更新消息列表, assistantMessageId:', assistantMessageId);
-                const newMessages = prevState.messages.map((msg) =>
-                  msg.messageId === assistantMessageId
-                    ? { ...msg, content: buffer }
-                    : msg
-                );
-                console.log('新消息列表:', newMessages);
-                return { messages: newMessages };
-              });
+              // 传入 assistantMessageId 以便子类可以直接更新对应的消息
+              assistantMessage = this.reduceAssistantMessage(
+                eventMessage,
+                assistantMessage,
+                assistantMessageId
+              );
 
               // 重置 currentEvent，准备处理下一个事件
               currentEvent = '';
             } catch (e) {
-              console.error('解析流式响应失败:', e, '原始数据:', dataStr);
+              console.error('解析流式响应失败:', e, '原始数据长度:', dataStr.length);
+              console.error('数据前100字符:', dataStr.substring(0, 100));
+              console.error('数据后100字符:', dataStr.substring(Math.max(0, dataStr.length - 100)));
             }
           }
         }
+      }
+
+      // 处理缓冲区中剩余的数据（如果有）
+      if (buffer.trim()) {
+        console.log('处理剩余缓冲区数据:', buffer);
       }
     } finally {
       // 流式传输完成后,闭包会被丢弃
       reader.releaseLock();
     }
 
-    return buffer;
+    return assistantMessage;
   }
 
   /**

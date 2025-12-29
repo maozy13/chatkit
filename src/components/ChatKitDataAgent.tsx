@@ -2,7 +2,6 @@ import { ChatKitBase, ChatKitBaseProps } from './ChatKitBase';
 import {
   ApplicationContext,
   ChatMessage,
-  ChatMessageType,
   RoleType,
   OnboardingInfo,
   WebSearchQuery,
@@ -311,8 +310,7 @@ export class ChatKitDataAgent extends ChatKitBase<ChatKitDataAgentProps> {
     const assistantMessageId = `assistant-${Date.now()}`;
     const initialAssistantMessage: ChatMessage = {
       messageId: assistantMessageId,
-      content: '',
-      type: ChatMessageType.TEXT,
+      content: [], // 初始化为空数组，后续会通过 append*Block 方法添加内容块
       role: {
         name: 'AI 助手',
         type: RoleType.ASSISTANT,
@@ -330,12 +328,13 @@ export class ChatKitDataAgent extends ChatKitBase<ChatKitDataAgentProps> {
       throw new Error('无法获取流式响应');
     }
 
-    const finalContent = await this.handleStreamResponse(reader, assistantMessageId);
+    // 处理流式响应，返回最终的 AssistantMessage 对象
+    await this.handleStreamResponse<AssistantMessage>(reader, assistantMessageId);
 
-    return {
-      ...initialAssistantMessage,
-      content: finalContent,
-    };
+    // 从 state 中获取最终更新后的消息
+    const finalMessage = this.state.messages.find((msg) => msg.messageId === assistantMessageId);
+
+    return finalMessage || initialAssistantMessage;
   }
 
   /**
@@ -343,9 +342,10 @@ export class ChatKitDataAgent extends ChatKitBase<ChatKitDataAgentProps> {
    * 根据设计文档实现白名单机制和 JSONPath 处理
    * @param eventMessage 接收到的一条 Event Message
    * @param prev 上一次增量更新后的 AssistantMessage 对象
+   * @param messageId 当前正在更新的消息 ID
    * @returns 返回更新后的 AssistantMessage 对象
    */
-  public reduceAssistantMessage<T = any, K = any>(eventMessage: T, prev: K): K {
+  public reduceAssistantMessage<T = any, K = any>(eventMessage: T, prev: K, messageId: string): K {
     try {
       // 解析 EventMessage
       const parsed = typeof eventMessage === 'string' ? JSON.parse(eventMessage) : eventMessage;
@@ -377,9 +377,9 @@ export class ChatKitDataAgent extends ChatKitBase<ChatKitDataAgentProps> {
         assistantMessage = this.applyAppend(assistantMessage, em.key || [], em.content);
       }
 
-      // 执行后处理
+      // 执行后处理，传入 messageId
       if (whitelistEntry.postProcess) {
-        whitelistEntry.postProcess(assistantMessage, em.content);
+        whitelistEntry.postProcess(assistantMessage, em.content, messageId);
       }
 
       return assistantMessage as K;
@@ -436,19 +436,25 @@ export class ChatKitDataAgent extends ChatKitBase<ChatKitDataAgentProps> {
    * 根据设计文档 3.2 Event Message 白名单
    */
   private getWhitelistEntry(action: string, jsonPath: string): {
-    postProcess?: (assistantMessage: AssistantMessage, content: any) => void;
+    postProcess?: (assistantMessage: AssistantMessage, content: any, messageId: string) => void;
   } | null {
-    const entries: { [key: string]: { postProcess?: (assistantMessage: AssistantMessage, content: any) => void } } = {
+    const entries: {
+      [key: string]: {
+        postProcess?: (assistantMessage: AssistantMessage, content: any, messageId: string) => void
+      }
+    } = {
       'upsert:error': {},
       'upsert:message': {},
       'append:message.content.final_answer.answer.text': {
-        postProcess: (assistantMessage) => {
+        postProcess: (assistantMessage, _content, messageId) => {
+          // 从 AssistantMessage 中提取完整的文本内容
           const text = assistantMessage.message?.content?.final_answer?.answer?.text || '';
-          this.appendTextBlock(text);
+          // 调用 appendMarkdownBlock 方法更新界面上的 Markdown 块
+          this.appendMarkdownBlock(messageId, text);
         },
       },
       'append:message.content.middle_answer.progress': {
-        postProcess: (_assistantMessage, content) => {
+        postProcess: (_assistantMessage, content, messageId) => {
           // content 是一个 Progress 对象
           if (content?.stage === 'skill') {
             // 检查是否是 Web 搜索工具
@@ -456,7 +462,7 @@ export class ChatKitDataAgent extends ChatKitBase<ChatKitDataAgentProps> {
               // 构造 WebSearchQuery 并调用渲染方法
               const searchQuery = this.extractWebSearchQuery(content.skill_info);
               if (searchQuery) {
-                this.appendWebSearchBlock(searchQuery);
+                this.appendWebSearchBlock(messageId, searchQuery);
               }
             } else {
               // 其他工具，输出工具名称
@@ -465,7 +471,7 @@ export class ChatKitDataAgent extends ChatKitBase<ChatKitDataAgentProps> {
           } else if (content?.stage === 'llm') {
             // LLM 阶段，输出 answer
             const answer = content.answer || '';
-            this.appendTextBlock(answer);
+            this.appendMarkdownBlock(messageId, answer);
           }
         },
       },
@@ -481,13 +487,13 @@ export class ChatKitDataAgent extends ChatKitBase<ChatKitDataAgentProps> {
 
     if (action === 'append' && progressArrayAnswerPattern.test(jsonPath)) {
       return {
-        postProcess: (assistantMessage) => {
+        postProcess: (assistantMessage, _content, messageId) => {
           // 提取最后一个 progress 的 answer
           const progress = assistantMessage.message?.content?.middle_answer?.progress || [];
           if (progress.length > 0) {
             const lastProgress = progress[progress.length - 1];
             const answer = lastProgress.answer || '';
-            this.appendTextBlock(answer);
+            this.appendMarkdownBlock(messageId, answer);
           }
         },
       };

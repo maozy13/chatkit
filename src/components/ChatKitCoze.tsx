@@ -1,5 +1,5 @@
 import { ChatKitBase, ChatKitBaseProps } from './ChatKitBase';
-import { ChatMessage, ChatMessageType, RoleType, ApplicationContext, EventStreamMessage, OnboardingInfo } from '../types';
+import { ChatMessage, RoleType, ApplicationContext, EventStreamMessage, OnboardingInfo } from '../types';
 
 /**
  * ChatKitCoze 组件的属性接口
@@ -187,8 +187,7 @@ export class ChatKitCoze extends ChatKitBase<ChatKitCozeProps> {
       const assistantMessageId = `assistant-${Date.now()}`;
       const initialAssistantMessage: ChatMessage = {
         messageId: assistantMessageId,
-        content: '',
-        type: ChatMessageType.TEXT,
+        content: [], // 初始化为空数组，后续会通过 append*Block 方法添加内容块
         role: {
           name: 'AI 助手',
           type: RoleType.ASSISTANT,
@@ -209,19 +208,12 @@ export class ChatKitCoze extends ChatKitBase<ChatKitCozeProps> {
       }
 
       // 调用父类的 handleStreamResponse 方法处理流式数据
-      const finalContent = await this.handleStreamResponse(reader, assistantMessageId);
+      await this.handleStreamResponse<string>(reader, assistantMessageId);
 
-      // 返回最终的消息对象
-      return {
-        messageId: assistantMessageId,
-        content: finalContent,
-        type: ChatMessageType.TEXT,
-        role: {
-          name: 'AI 助手',
-          type: RoleType.ASSISTANT,
-          avatar: '',
-        },
-      };
+      // 从 state 中获取最终更新后的消息
+      const finalMessage = this.state.messages.find((msg) => msg.messageId === assistantMessageId);
+
+      return finalMessage || initialAssistantMessage;
     } catch (error) {
       console.error('调用扣子流式 API 失败:', error);
       throw error;
@@ -235,7 +227,7 @@ export class ChatKitCoze extends ChatKitBase<ChatKitCozeProps> {
    * @param prev 上一次增量更新后的文本 buffer
    * @returns 返回更新后的文本 buffer
    */
-  public reduceAssistantMessage<T = any, K = any>(eventMessage: T, prev: K): K {
+  public reduceAssistantMessage<T = any, K = any>(eventMessage: T, prev: K, messageId: string): K {
     try {
       const em = eventMessage as EventStreamMessage;
       const data = JSON.parse(em.data);
@@ -259,12 +251,16 @@ export class ChatKitCoze extends ChatKitBase<ChatKitCozeProps> {
         if (data.content && data.type === 'answer') {
           const newBuffer = prevBuffer + data.content;
           console.log('增量内容:', data.content, '新buffer:', newBuffer);
+          // 调用 appendMarkdownBlock 方法更新界面上的 Markdown 块
+          this.appendMarkdownBlock(messageId, newBuffer);
           return newBuffer as K;
         }
       } else if (em.event === 'conversation.message.completed') {
         // 消息完成,只处理 type 为 answer 的消息
         if (data.content && data.type === 'answer') {
           console.log('消息完成,完整内容:', data.content);
+          // 调用 appendMarkdownBlock 方法更新界面上的 Markdown 块
+          this.appendMarkdownBlock(messageId, data.content);
           return data.content as K;
         }
         // 忽略 verbose 类型的消息
