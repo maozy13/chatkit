@@ -203,16 +203,18 @@ components:
           type: string
           enum: [search_intent]
         search_intent:
-          type: object
-          description: 搜索参数
-          properties:
-            keywords:
-              type: string
-            query:
-              type: string
-            intent:
-              type: string
-              enum: [SEARCH_ALL]
+          type: array
+          items:
+            type: object
+            description: 搜索参数
+            properties:
+              keywords:
+                type: string
+              query:
+                type: string
+              intent:
+                type: string
+                enum: [SEARCH_ALL]
     
     SearchResult:
       type: object
