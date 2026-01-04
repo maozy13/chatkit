@@ -1,9 +1,5 @@
 import { Component } from 'react';
-import { ChatMessage, RoleType, ApplicationContext, ChatKitInterface, EventStreamMessage, OnboardingInfo, WebSearchQuery, BlockType, MarkdownBlock, WebSearchBlock } from '../types';
-import MessageList from './MessageList';
-import InputArea from './InputArea';
-import Header from './Header';
-import Prologue from './Prologue';
+import { ChatMessage, RoleType, ApplicationContext, ChatKitInterface, EventStreamMessage, OnboardingInfo, WebSearchQuery, BlockType, MarkdownBlock, WebSearchBlock } from '../../types';
 
 /**
  * ChatKitBase 组件的属性接口
@@ -603,7 +599,7 @@ export abstract class ChatKitBase<P extends ChatKitBaseProps = ChatKitBaseProps>
   /**
    * 处理发送按钮点击
    */
-  private handleSend = async () => {
+  protected handleSend = async () => {
     if (!this.state.textInput.trim() || this.state.isSending) {
       return;
     }
@@ -624,7 +620,7 @@ export abstract class ChatKitBase<P extends ChatKitBaseProps = ChatKitBaseProps>
    * 处理停止流式响应
    * 调用子类实现的 terminateConversation 方法终止当前会话
    */
-  private handleStop = async () => {
+  protected handleStop = async () => {
     const { conversationID, streamingMessageId } = this.state;
 
     if (!streamingMessageId) {
@@ -658,74 +654,23 @@ export abstract class ChatKitBase<P extends ChatKitBaseProps = ChatKitBaseProps>
   /**
    * 更新用户输入
    */
-  private setTextInput = (value: string) => {
+  protected setTextInput = (value: string) => {
     this.setState({ textInput: value });
   };
 
   /**
    * 处理推荐问题点击
    */
-  private handleQuestionClick = (question: string) => {
+  protected handleQuestionClick = (question: string) => {
     this.setState({ textInput: question });
   };
 
-  render() {
-    if (!this.props.visible) {
-      return null;
-    }
-
-    const { title = 'Copilot', onClose } = this.props;
-    const { messages, textInput, applicationContext, isSending, onboardingInfo, isLoadingOnboarding, streamingMessageId } = this.state;
-    const showPrologue = messages.length === 0;
-    const isStreaming = streamingMessageId !== null;
-
-    return (
-      <div className="flex flex-col h-full w-full bg-white shadow-2xl">
-        {/* 头部 */}
-        <Header
-          title={title}
-          onClose={onClose}
-          onNewChat={this.createConversation}
-        />
-
-        {/* 消息列表区域或欢迎界面 */}
-        <div className="flex-1 overflow-y-auto">
-          {showPrologue ? (
-            isLoadingOnboarding ? (
-              // 加载中，显示加载提示
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center">
-                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mb-4"></div>
-                  <p className="text-sm text-gray-500">正在加载...</p>
-                </div>
-              </div>
-            ) : (
-              // 加载完成，显示开场白
-              <Prologue
-                onQuestionClick={this.handleQuestionClick}
-                prologue={onboardingInfo?.prologue}
-                predefinedQuestions={onboardingInfo?.predefinedQuestions}
-              />
-            )
-          ) : (
-            <MessageList messages={messages} />
-          )}
-        </div>
-
-        {/* 输入区域 */}
-        <InputArea
-          value={textInput}
-          onChange={this.setTextInput}
-          onSend={this.handleSend}
-          context={applicationContext}
-          onRemoveContext={this.removeApplicationContext}
-          disabled={isSending}
-          isStreaming={isStreaming}
-          onStop={this.handleStop}
-        />
-      </div>
-    );
-  }
+  /**
+   * 渲染组件 (抽象方法，由子类实现)
+   * 子类需要实现该方法以渲染不同的界面
+   * CopilotBase 和 AssistantBase 会分别实现各自的渲染逻辑
+   */
+  abstract render(): React.ReactNode;
 }
 
 export default ChatKitBase;

@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { ChatKitDataAgent, type ApplicationContext } from '@dip/chatkit';
+import { Copilot, type ApplicationContext } from '@dip/chatkit';
 import { DATA_AGENT_CONFIG } from './config';
 
 /**
@@ -8,7 +8,7 @@ import { DATA_AGENT_CONFIG } from './config';
  */
 export const ChatKitDataAgentDemo: React.FC = () => {
   const [showChat, setShowChat] = useState(false);
-  const chatKitRef = useRef<ChatKitDataAgent>(null);
+  const chatKitRef = useRef<Copilot>(null);
   const chatOffsetClass = showChat ? 'md:pr-[500px]' : '';
 
   /**
@@ -154,7 +154,7 @@ export const ChatKitDataAgentDemo: React.FC = () => {
 
       {showChat && (
         <div className="fixed right-4 top-4 bottom-4 w-[480px] max-w-[92vw] z-10">
-          <ChatKitDataAgent
+          <Copilot
             ref={chatKitRef}
             title="Data Agent Copilot"
             visible={showChat}

@@ -1,19 +1,19 @@
 import React, { useState } from 'react';
-import { WebSearchBlock } from '../../types';
+import { WebSearchBlock as WebSearchBlockType } from '../../../../types';
 
 /**
- * WebSearchBlockComponent 组件的属性接口
+ * WebSearchBlock 组件的属性接口
  */
-export interface WebSearchBlockComponentProps {
+export interface WebSearchBlockProps {
   /** Web 搜索块数据 */
-  block: WebSearchBlock;
+  block: WebSearchBlockType;
 }
 
 /**
- * WebSearchBlockComponent 组件
+ * WebSearchBlock 组件
  * 用于渲染 Web 搜索类型的消息块
  */
-const WebSearchBlockComponent: React.FC<WebSearchBlockComponentProps> = ({ block }) => {
+const WebSearchBlock: React.FC<WebSearchBlockProps> = ({ block }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const { input, results } = block.content;
 
@@ -111,4 +111,4 @@ const WebSearchBlockComponent: React.FC<WebSearchBlockComponentProps> = ({ block
   );
 };
 
-export default WebSearchBlockComponent;
+export default WebSearchBlock;

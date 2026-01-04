@@ -15,31 +15,37 @@ ChatKit 是一个 AI 对话组件。Web 应用开发者可以将 ChatKit 集成�
 
 ```
 chatkit/
-├── src/                          # ChatKit 组件源码
-│   ├── components/               # React 组件
-│   │   ├── ChatKitBase.tsx       # 核心基类组件
-│   │   ├── ChatKitCoze.tsx       # 扣子平台适配组件
-│   │   ├── ChatKitDataAgent.tsx  # AISHU Data Agent 适配组件
-│   │   ├── MessageList.tsx       # 消息列表组件
-│   │   ├── MessageItem.tsx       # 消息项组件
-│   │   └── InputArea.tsx         # 输入区域组件
-│   ├── types/                    # TypeScript 类型定义
-│   │   └── index.ts              # 类型定义文件
-│   ├── styles/                   # 样式文件
-│   │   └── index.css             # 全局样式
-│   └── index.ts                  # 导出入口
-├── examples/                     # Demo 示例应用
-│   ├── chatkit_coze/             # 扣子 Demo
-│   └── chatkit_data_agent/       # Data Agent Demo
-├── openapi/                      # OpenAPI 规范（Coze 与 Data Agent）
-│   ├── coze.openapi.yaml         # Coze API 入口
-│   ├── data-agent.openapi.yaml   # Data Agent API 入口
-│   ├── bots/                     # Coze Bot schemas 与 paths
-│   ├── chat/                     # Coze Chat schemas 与 paths
-│   └── data-agent/               # Data Agent 请求/响应 schemas 与 paths
-├── api/                          # 预留 API 目录
-├── design/                       # 设计文档
-├── public/                       # 静态资源
+├── src/                                # ChatKit 组件源码
+│   ├── components/                     # React 组件
+│   │   ├── ChatKitBase.tsx             # 核心基类组件
+│   │   ├── CopilotBase.tsx             # Copilot 模式基类
+│   │   ├── AssistantBase.tsx           # Assistant 模式基类
+│   │   ├── DataAgentBase.tsx           # Data Agent Mixin
+│   │   ├── ChatKitCoze.tsx             # 扣子平台适配组件
+│   │   ├── ChatKitDataAgentCopilot.tsx # Data Agent Copilot 组件
+│   │   ├── ChatKitDataAgentAssistant.tsx # Data Agent Assistant 组件
+│   │   ├── MessageList.tsx             # 消息列表组件
+│   │   ├── MessageItem.tsx             # 消息项组件
+│   │   └── InputArea.tsx               # 输入区域组件
+│   ├── utils/                          # 工具函数
+│   │   └── mixins.ts                   # TypeScript Mixin 工具
+│   ├── types/                          # TypeScript 类型定义
+│   │   └── index.ts                    # 类型定义文件
+│   ├── styles/                         # 样式文件
+│   │   └── index.css                   # 全局样式
+│   └── index.ts                        # 导出入口
+├── examples/                           # Demo 示例应用
+│   ├── chatkit_coze/                   # 扣子 Demo
+│   └── chatkit_data_agent/             # Data Agent Demo
+├── openapi/                            # OpenAPI 规范（Coze 与 Data Agent）
+│   ├── coze.openapi.yaml               # Coze API 入口
+│   ├── data-agent.openapi.yaml         # Data Agent API 入口
+│   ├── bots/                           # Coze Bot schemas 与 paths
+│   ├── chat/                           # Coze Chat schemas 与 paths
+│   └── data-agent/                     # Data Agent 请求/响应 schemas 与 paths
+├── api/                                # 预留 API 目录
+├── design/                             # 设计文档
+├── public/                             # 静态资源
 └── package.json
 ```
 
@@ -124,22 +130,87 @@ function App() {
 }
 ```
 
-### 使用 ChatKitDataAgent (AISHU Data Agent)
+### 使用 Data Agent Copilot (AISHU Data Agent)
+
+```tsx
+import React, { useRef, useState } from 'react';
+import { Copilot, type ApplicationContext } from 'chatkit';
+
+function App() {
+  const [showChat, setShowChat] = useState(false);
+  const chatKitRef = useRef<Copilot>(null);
+
+  // Token 刷新函数
+  const refreshToken = async (): Promise<string> => {
+    // 调用您的 token 刷新接口
+    const response = await fetch('/api/refresh-token');
+    const data = await response.json();
+    return data.token;
+  };
+
+  // 注入上下文示例
+  const injectContext = () => {
+    chatKitRef.current?.injectApplicationContext({
+      title: '故障节点',
+      data: { node_id: 'node-uuid-1' },
+    });
+  };
+
+  // 发送消息示例
+  const sendMessage = async () => {
+    const context: ApplicationContext = {
+      title: '中心节点',
+      data: { node_id: 'node-uuid-1' },
+    };
+
+    await chatKitRef.current?.send(
+      '节点故障,帮我分析可能的原因并给出解决方案',
+      context
+    );
+  };
+
+  return (
+    <div>
+      <button onClick={injectContext}>添加上下文</button>
+      <button onClick={sendMessage}>发送消息</button>
+      <button onClick={() => setShowChat(!showChat)}>
+        {showChat ? '关闭' : '打开'}聊天
+      </button>
+
+      {showChat && (
+        <Copilot
+          ref={chatKitRef}
+          title="Data Agent Copilot"
+          visible={showChat}
+          onClose={() => setShowChat(false)}
+          agentId="你的Agent ID"
+          token="your-token"
+          refreshToken={refreshToken}
+          baseUrl="https://dip.aishu.cn/api/agent-app/v1"
+        />
+      )}
+    </div>
+  );
+}
+```
+
+### 使用 Data Agent Assistant (AISHU Data Agent)
 
 ```tsx
 import React, { useRef } from 'react';
-import { ChatKitDataAgent } from 'chatkit';
+import { Assistant } from 'chatkit';
 
 function App() {
-  const chatKitRef = useRef<ChatKitDataAgent>(null);
+  const chatKitRef = useRef<Assistant>(null);
 
   return (
-    <ChatKitDataAgent
+    <Assistant
       ref={chatKitRef}
-      agentId="你的Agent ID"
-      bearerToken="Bearer your-token"
-      title="Copilot"
+      title="Data Agent Assistant"
       visible={true}
+      agentId="你的Agent ID"
+      token="your-token"
+      baseUrl="https://dip.aishu.cn/api/agent-app/v1"
     />
   );
 }
@@ -183,18 +254,37 @@ ChatKitBase 是 AI 对话组件的核心基类。开发者不能直接挂载 Cha
 | baseUrl | `string` | 否 | `'https://api.coze.cn'` | 扣子 API 基础 URL |
 | userId | `string` | 否 | `'chatkit-user'` | 用户 ID |
 
-### ChatKitDataAgent
+### Copilot (Data Agent)
 
-AISHU Data Agent 平台适配组件。
+AISHU Data Agent 平台的 Copilot 模式组件。侧边跟随的 AI 助手，为应用提供辅助对话。
 
 #### 额外属性
 
 | 属性名 | 类型 | 必填 | 默认值 | 说明 |
 |--------|------|------|--------|------|
 | agentId | `string` | 是 | - | Agent ID |
-| bearerToken | `string` | 是 | - | 访问令牌（需包含 Bearer 前缀）|
+| token | `string` | 是 | - | 访问令牌 |
 | baseUrl | `string` | 否 | `'https://dip.aishu.cn/api/agent-app/v1'` | 服务端基础地址 |
-| enableIncrementalStream | `boolean` | 否 | `true` | 是否开启增量流式返回 |
+| agentVersion | `string` | 否 | `'latest'` | Agent 版本 |
+| executorVersion | `string` | 否 | `'v2'` | 智能体执行引擎版本 |
+| businessDomain | `string` | 否 | `'bd_public'` | 业务域 |
+| refreshToken | `() => Promise<string>` | 否 | - | Token 刷新函数 |
+
+### Assistant (Data Agent)
+
+AISHU Data Agent 平台的 Assistant 模式组件。作为主交互入口，是应用的主体。
+
+#### 额外属性
+
+| 属性名 | 类型 | 必填 | 默认值 | 说明 |
+|--------|------|------|--------|------|
+| agentId | `string` | 是 | - | Agent ID |
+| token | `string` | 是 | - | 访问令牌 |
+| baseUrl | `string` | 否 | `'https://dip.aishu.cn/api/agent-app/v1'` | 服务端基础地址 |
+| agentVersion | `string` | 否 | `'latest'` | Agent 版本 |
+| executorVersion | `string` | 否 | `'v2'` | 智能体执行引擎版本 |
+| businessDomain | `string` | 否 | `'bd_public'` | 业务域 |
+| refreshToken | `() => Promise<string>` | 否 | - | Token 刷新函数 |
 
 ### 类型定义
 

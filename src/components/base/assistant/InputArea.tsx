@@ -1,5 +1,5 @@
 import React from 'react';
-import { ApplicationContext } from '../types';
+import { ApplicationContext } from '../../../types';
 
 /**
  * InputArea 组件的属性接口
