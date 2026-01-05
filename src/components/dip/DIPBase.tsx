@@ -25,6 +25,7 @@ interface AssistantMessage {
         answer?: {
           text?: string;
         };
+        answer_type_other?: OtherTypeAnswer;
       };
       middle_answer?: {
         progress?: Progress[];
@@ -35,17 +36,39 @@ interface AssistantMessage {
 }
 
 /**
+ * OtherTypeAnswer 接口
+ * 智能体输出的非文本类型内容
+ * 对应 agent-app.schemas.yaml#/components/schemas/OtherTypeAnswer
+ */
+interface OtherTypeAnswer {
+  stage?: string;
+  answer?: any;
+  skill_info?: SkillInfo;
+}
+
+/**
+ * SkillInfo 接口
+ * 调用技能的技能详情
+ * 对应 agent-app.schemas.yaml#/components/schemas/SkillInfo
+ */
+interface SkillInfo {
+  type?: 'TOOL' | 'MCP' | 'AGENT';
+  name?: string;
+  args?: Array<{
+    name?: string;
+    type?: string;
+    value?: string;
+  }>;
+}
+
+/**
  * Progress 接口
  * 智能体执行过程中的一个步骤
  */
 interface Progress {
   stage?: string;
-  answer?: string;
-  skill_info?: {
-    name?: string;
-    input?: any;
-    output?: any;
-  };
+  answer?: string | any;
+  skill_info?: SkillInfo;
 }
 
 /**
@@ -483,23 +506,16 @@ export function DIPBaseMixin<TBase extends Constructor>(Base: TBase) {
           (this as any).appendMarkdownBlock(messageId, text);
         },
       },
+      'upsert:message.content.final_answer.answer_type_other': {
+        postProcess: (_assistantMessage, content, messageId) => {
+          // content 是一个 OtherTypeAnswer 对象
+          this.processFinalAnswerTypeOther(content, messageId);
+        },
+      },
       'append:message.content.middle_answer.progress': {
         postProcess: (_assistantMessage, content, messageId) => {
           // content 是一个 Progress 对象
-          if (content?.stage === 'skill') {
-            // 检查是否是 Web 搜索工具
-            if (content.skill_info?.name === 'zhipu_search_tool') {
-              // 构造 WebSearchQuery 并调用渲染方法
-              const searchQuery = this.extractWebSearchQuery(content);
-              if (searchQuery) {
-                (this as any).appendWebSearchBlock(messageId, searchQuery);
-              }
-            }
-          } else if (content?.stage === 'llm') {
-            // LLM 阶段，输出 answer
-            const answer = content.answer || '';
-            (this as any).appendMarkdownBlock(messageId, answer);
-          }
+          this.processMiddleAnswerProgress(content, messageId);
         },
       },
     };
@@ -519,8 +535,10 @@ export function DIPBaseMixin<TBase extends Constructor>(Base: TBase) {
           const progress = assistantMessage.message?.content?.middle_answer?.progress || [];
           if (progress.length > 0) {
             const lastProgress = progress[progress.length - 1];
-            const answer = lastProgress.answer || '';
-            (this as any).appendMarkdownBlock(messageId, answer);
+            if (lastProgress.stage === 'llm') {
+              const answer = lastProgress.answer || '';
+              (this as any).appendMarkdownBlock(messageId, answer);
+            }
           }
         },
       };
@@ -577,6 +595,190 @@ export function DIPBaseMixin<TBase extends Constructor>(Base: TBase) {
     } catch (e) {
       console.error('提取 Web 搜索查询失败:', e);
       return null;
+    }
+  }
+
+  /**
+   * 处理技能调用的统一方法
+   * 根据设计文档 3.2 Event Message 白名单中的后处理逻辑
+   * @param skillInfo 技能信息
+   * @param answer 技能执行的 answer 字段
+   * @param messageId 消息 ID
+   */
+  public processSkillExecution(skillInfo: SkillInfo | undefined, answer: any, messageId: string): void {
+    if (!skillInfo?.name) {
+      return;
+    }
+
+    const skillName = skillInfo.name;
+
+    if (skillName === 'zhipu_search_tool') {
+      // Web 搜索工具
+      const searchQuery = this.extractWebSearchQueryFromAnswer(answer);
+      if (searchQuery) {
+        (this as any).appendWebSearchBlock(messageId, searchQuery);
+      }
+    } else if (skillName === 'json2plot') {
+      // json2plot 工具：将 skill_info.args 解析出 ChartDataSchema 结构并输出到界面
+      const chartData = this.extractChartDataFromArgs(skillInfo.args);
+      if (chartData) {
+        (this as any).appendJson2plotBlock(messageId, chartData);
+      }
+    } else {
+      // 其他技能：输出技能名称
+      (this as any).appendMarkdownBlock(messageId, `调用工具: ${skillName}`);
+    }
+  }
+
+  /**
+   * 处理 final_answer.answer_type_other
+   * 根据设计文档 3.2 Event Message 白名单中的后处理逻辑
+   * @param content OtherTypeAnswer 对象
+   * @param messageId 消息 ID
+   */
+  public processFinalAnswerTypeOther(content: OtherTypeAnswer, messageId: string): void {
+    if (content?.stage === 'skill') {
+      this.processSkillExecution(content.skill_info, content.answer, messageId);
+    }
+  }
+
+  /**
+   * 处理 middle_answer.progress 中的一个元素
+   * 根据设计文档 3.2 Event Message 白名单中的后处理逻辑
+   * @param content Progress 对象
+   * @param messageId 消息 ID
+   */
+  public processMiddleAnswerProgress(content: Progress, messageId: string): void {
+    if (content?.stage === 'skill') {
+      this.processSkillExecution(content.skill_info, content.answer, messageId);
+    } else if (content?.stage === 'llm') {
+      // LLM 阶段，输出 answer
+      const answer = content.answer || '';
+      (this as any).appendMarkdownBlock(messageId, answer);
+    }
+  }
+
+  /**
+   * 从 answer.choices 中提取 Web 搜索查询
+   * 用于处理 final_answer.answer_type_other 和 middle_answer.progress 中的搜索结果
+   */
+  public extractWebSearchQueryFromAnswer(answer: any): WebSearchQuery | null {
+    try {
+      const toolCalls = answer?.choices?.[0]?.message?.tool_calls;
+
+      if (!toolCalls || !Array.isArray(toolCalls) || toolCalls.length < 2) {
+        return null;
+      }
+
+      // tool_calls[0] 是 SearchIntent（输入）
+      const searchIntentObj = toolCalls[0];
+      const searchIntentArray = searchIntentObj?.search_intent;
+      const searchIntent = Array.isArray(searchIntentArray) ? searchIntentArray[0] : searchIntentArray;
+      const query = searchIntent?.query || searchIntent?.keywords || '';
+
+      // tool_calls[1] 是 SearchResult（输出）
+      const searchResultObj = toolCalls[1];
+      const searchResultArray = searchResultObj?.search_result;
+
+      if (!searchResultArray || !Array.isArray(searchResultArray)) {
+        return null;
+      }
+
+      const results: WebSearchResult[] = searchResultArray.map((item: any) => ({
+        content: item.content || '',
+        icon: item.icon || '',
+        link: item.link || '',
+        media: item.media || '',
+        title: item.title || '',
+      }));
+
+      return {
+        input: query,
+        results,
+      };
+    } catch (e) {
+      console.error('提取 Web 搜索查询失败:', e);
+      return null;
+    }
+  }
+
+  /**
+   * 从 skill_info.args 中提取图表数据
+   * 用于处理 json2plot 工具的输出
+   */
+  public extractChartDataFromArgs(args: Array<{name?: string; type?: string; value?: string}> | undefined): any {
+    if (!args || !Array.isArray(args)) {
+      return null;
+    }
+
+    try {
+      // 将 args 数组转换为对象
+      const chartData: any = {};
+      for (const arg of args) {
+        if (arg.name && arg.value !== undefined) {
+          // 尝试解析 JSON 字符串
+          try {
+            chartData[arg.name] = JSON.parse(arg.value);
+          } catch {
+            chartData[arg.name] = arg.value;
+          }
+        }
+      }
+      return chartData;
+    } catch (e) {
+      console.error('提取图表数据失败:', e);
+      return null;
+    }
+  }
+
+  /**
+   * 将技能调用或 LLM 回答的内容追加到消息中
+   * 用于历史消息解析，根据 stage 和 skill_info 将内容添加到 ChatMessage.content 数组
+   * @param item Progress 或 OtherTypeAnswer 对象
+   * @param message ChatMessage 对象
+   */
+  public appendSkillOrLLMContentToMessage(
+    item: Progress | OtherTypeAnswer,
+    message: ChatMessage
+  ): void {
+    if (item.stage === 'skill') {
+      // 处理技能调用
+      const skillName = item.skill_info?.name;
+
+      if (skillName === 'zhipu_search_tool') {
+        // Web 搜索
+        const searchQuery = this.extractWebSearchQueryFromAnswer(item.answer);
+        if (searchQuery) {
+          message.content.push({
+            type: BlockType.WEB_SEARCH,
+            content: searchQuery,
+          });
+        }
+      } else if (skillName === 'json2plot') {
+        // json2plot 工具
+        const chartData = this.extractChartDataFromArgs(item.skill_info?.args);
+        if (chartData) {
+          // 将图表数据作为 JSON 显示（可以后续扩展为图表组件）
+          message.content.push({
+            type: BlockType.TEXT,
+            content: `图表数据: ${JSON.stringify(chartData, null, 2)}`,
+          });
+        }
+      } else {
+        // 其他技能，显示技能名称
+        message.content.push({
+          type: BlockType.TEXT,
+          content: `调用工具: ${skillName}`,
+        });
+      }
+    } else if (item.stage === 'llm') {
+      // LLM 回答
+      if (item.answer) {
+        message.content.push({
+          type: BlockType.MARKDOWN,
+          content: item.answer,
+        });
+      }
     }
   }
 
@@ -917,54 +1119,26 @@ export function DIPBaseMixin<TBase extends Constructor>(Base: TBase) {
               const middleAnswer = contentObj?.middle_answer;
               if (middleAnswer?.progress && Array.isArray(middleAnswer.progress)) {
                 for (const progressItem of middleAnswer.progress) {
-                  if (progressItem.stage === 'skill') {
-                    // 处理技能调用
-                    const skillName = progressItem.skill_info?.name;
-                    if (skillName === 'zhipu_search_tool') {
-                      // Web 搜索
-                      const choices = progressItem.answer?.choices;
-                      if (choices && Array.isArray(choices)) {
-                        const webSearchQuery: WebSearchQuery = {
-                          input: progressItem.skill_info?.args?.query || '',
-                          results: choices.map((choice: any) => ({
-                            content: choice.content || '',
-                            icon: choice.icon || '',
-                            link: choice.link || '',
-                            media: choice.media || '',
-                            title: choice.title || '',
-                          })),
-                        };
-                        aiMessage.content.push({
-                          type: BlockType.WEB_SEARCH,
-                          content: webSearchQuery,
-                        });
-                      }
-                    } else {
-                      // 其他技能，显示技能名称
-                      aiMessage.content.push({
-                        type: BlockType.TEXT,
-                        content: `调用工具: ${skillName}`,
-                      });
-                    }
-                  } else if (progressItem.stage === 'llm') {
-                    // LLM 回答
-                    if (progressItem.answer) {
-                      aiMessage.content.push({
-                        type: BlockType.MARKDOWN,
-                        content: progressItem.answer,
-                      });
-                    }
-                  }
+                  this.appendSkillOrLLMContentToMessage(progressItem, aiMessage);
                 }
               }
 
               // 3. 处理 final_answer
-              const finalAnswerText = contentObj?.final_answer?.answer?.text;
+              const finalAnswer = contentObj?.final_answer;
+
+              // 3.1 处理 final_answer.answer.text
+              const finalAnswerText = finalAnswer?.answer?.text;
               if (finalAnswerText) {
                 aiMessage.content.push({
                   type: BlockType.MARKDOWN,
                   content: finalAnswerText,
                 });
+              }
+
+              // 3.2 处理 final_answer.answer_type_other
+              const answerTypeOther = finalAnswer?.answer_type_other;
+              if (answerTypeOther) {
+                this.appendSkillOrLLMContentToMessage(answerTypeOther, aiMessage);
               }
 
               chatMessages.push(aiMessage);

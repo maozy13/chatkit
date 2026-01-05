@@ -134,6 +134,8 @@ components:
             text:
               type: string
               description: 智能体最终输出的文本内容
+        answer_type_other:
+          $ref: "#/components/schemas/OtherTypeAnswer"
       
     MiddleAnswer:
       type: object
@@ -143,6 +145,24 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Progress"
+    
+    OtherTypeAnswer:
+      type: object
+      description: 智能体输出的非文本类型内容
+      properties:
+        stage:
+          type: string
+          description: |
+            输出的类型：
+              - llm：表示大模型输出
+              - skill：表示技能调用
+              - assign: 变量赋值
+          enum: [llm, skill, assign]
+        answer:
+          type: object
+          description: 其他类型内容的具体数据
+        skill_info:
+          $ref: "#/components/schemas/SkillInfo"
     
     Progress:
       type: object
